@@ -857,15 +857,17 @@ function rJob(){
       } else {
         // Separate card per paper (comparison mode or single paper)
         var laborOverrideRoom=parseFloat(r.laborOverride)||0;
-        if(!pRx&&!lRx&&!laborOverrideRoom){
-          // No data at all — skip unless there's an override
-        } else if(!pRx&&!lRx&&laborOverrideRoom){
+        var firstPRx=calcPForPaper(r,r.papers&&r.papers[0]?r.papers[0]:{});
+        var firstLRx=calcLForPaper(r,r.papers&&r.papers[0]?r.papers[0]:{});
+        if(!firstPRx&&!firstLRx&&!laborOverrideRoom){
+          // No data at all — skip
+        } else if(!firstPRx&&!firstLRx&&laborOverrideRoom){
           // Override only — show a simple card
           var mu=parseFloat(r.markup)||0;
           var overrideTotal=Math.round(laborOverrideRoom*(1+mu));
           h+='<div class="metric"><div class="mlabel">'+r.name+'</div>';
           h+='<div class="mval">$'+overrideTotal.toLocaleString()+'</div>';
-          h+='<div class="msub">override'+(r.rooms&&r.roomNotes?' · '+r.roomNotes:'')+'</div></div>';
+          h+='<div class="msub">override</div></div>';
         } else {
         r.papers.forEach(function(paper,idx){
           var pRx=calcPForPaper(r,paper);
