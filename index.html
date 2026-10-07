@@ -652,8 +652,12 @@ function calcL(room){
 }
 
 function roomTotal(lR,cR,room){
-  if(!lR)return 0;
   var laborOverride=room&&parseFloat(room.laborOverride)>0?parseFloat(room.laborOverride):0;
+  if(!lR){
+    // No calc result — return override with markup if set, otherwise 0
+    if(laborOverride>0){var mu0=parseFloat(room&&room.markup)||0;return mu0>0?Math.round(laborOverride*(1+mu0)):laborOverride;}
+    return 0;
+  }
   var mu=parseFloat(room&&room.markup)||0;
   var subtotal;
   if(room&&room.papers&&room.multiPaper&&room.papers.some(function(p){return parseFloat(p.wallWidth)>0&&parseFloat(p.wallHeight)>0;})){
