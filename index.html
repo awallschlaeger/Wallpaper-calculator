@@ -365,10 +365,10 @@ function calcP(room){
           var ow=parseFloat(op.width)||0,ab=parseFloat(op.above)||0,be=parseFloat(op.below)||0;
           var owIn=ow,sf=Math.floor((owIn-2-pw)/pw);
           if(sf<1)return;
-          ds+=sf;dl+=sf*sL(stripHFt,vr);
+          dl+=sf*sL(stripHFt,vr);
           if(ab>0)al+=sf*sL(ab/12,vr);
           if(be>0)al+=sf*sL(be/12,vr);
-          if(ab>0||be>0)ds-=sf;
+          if(ab===0&&be===0)ds+=sf;
         });
         strips+=Math.max(0,ms-ds);lf+=Math.max(0,segLF-dl+al);
       }
@@ -384,11 +384,10 @@ function calcP(room){
       var ow=parseFloat(op.width)||0,ab=parseFloat(op.above)||0,be=parseFloat(op.below)||0;
       var owIn=ow,sf=Math.floor((owIn-2-pw)/pw);
       if(sf<1)return;
-      ds+=sf;dl+=sf*sL(stripH,vr);
-      if(ab>0)al+=sf*sL(ab/12,vr);
-      if(be>0)al+=sf*sL(be/12,vr);
-      // strips are deducted (no full strip needed) but partial strips above/below still count
-      if(ab>0||be>0)ds-=sf; // add them back — they still need a strip cut
+      dl+=sf*sL(stripH,vr); // always deduct the full strip LF
+      if(ab>0)al+=sf*sL(ab/12,vr); // add back above paper
+      if(be>0)al+=sf*sL(be/12,vr); // add back below paper
+      if(ab===0&&be===0)ds+=sf; // only remove strips if nothing above or below
     });
     lf=Math.max(0,g-dl+al);strips=Math.max(0,s-ds);
   }
@@ -426,7 +425,10 @@ function calcP(room){
       });
     }
     var longestStrip=vr>0?sL(maxStripFt,vr):maxStripFt+0.5;
-    var stripsPerRoll=longestStrip>0?Math.floor(rf/longestStrip):1;
+    // If openings have reduced LF, use average actual strip length for packing
+    var avgStripFt=strips>0?lf/strips:longestStrip;
+    var effectiveStrip=avgStripFt<longestStrip?avgStripFt:longestStrip;
+    var stripsPerRoll=effectiveStrip>0?Math.floor(rf/effectiveStrip):1;
     rolls=stripsPerRoll>0?Math.ceil(strips/stripsPerRoll):Math.ceil(lf/rf);
   }
   // Add extra strips for window return wraps
@@ -1650,7 +1652,12 @@ function bind(){
   document.querySelectorAll('.opsc').forEach(function(s){s.addEventListener('change',function(){var r=aRoom();if(!r)return;var seg=r.segments.find(function(sg){return sg.id===s.dataset.segid;});if(seg){seg.openings[parseInt(s.dataset.oidx)][s.dataset.key]=s.value;save();render();}});});
   document.querySelectorAll('.bdso').forEach(function(b){b.addEventListener('click',function(){var r=aRoom();if(!r)return;var seg=r.segments.find(function(s){return s.id===b.dataset.segid;});if(seg){seg.openings.splice(parseInt(b.dataset.oidx),1);save();render();}});});
   g('bao')&&g('bao').addEventListener('click',function(){var r=aRoom();if(!r)return;r.openings.push(nOp());save();render();});
-  document.querySelectorAll('.opb').forEach(function(i){i.addEventListener('blur',function(){var r=aRoom();if(!r)return;r.openings[parseInt(i.dataset.idx)][i.dataset.key]=i.value;save();render();});});
+  document.querySelectorAll('.opb').forEach(function(i){
+    function saveOp(){var r=aRoom();if(!r)return;var op=r.openings[parseInt(i.dataset.idx)];if(op){op[i.dataset.key]=i.value;save();render();}}
+    i.addEventListener('change',saveOp);
+    i.addEventListener('blur',saveOp);
+    i.addEventListener('keydown',function(e){if(e.key==='Enter'){i.blur();}});
+  });
   document.querySelectorAll('.opc').forEach(function(s){s.addEventListener('change',function(){var r=aRoom();if(!r)return;r.openings[parseInt(s.dataset.idx)][s.dataset.key]=s.value;save();render();});});
   document.querySelectorAll('.bdo').forEach(function(b){b.addEventListener('click',function(){var r=aRoom();if(!r)return;r.openings.splice(parseInt(b.dataset.idx),1);save();render();});});
   g('bcd')&&g('bcd').addEventListener('change',function(e){var r=aRoom();if(!r)return;r.ceiling.direction=e.target.value;save();render();});
