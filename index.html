@@ -405,8 +405,8 @@ function calcP(room){
       var wIn=parseFloat(seg.width)||0,hFt=parseFloat(seg.height)||0;
       var stripHFt=ph>0?ph/12:hFt;
       if(!wIn||!hFt)return;
-      var ns=Math.ceil(wIn/pwF); // both in feet
-      var slen=vr>0?sL(stripHFt,vr):stripHFt+0.5;
+      var ns=isB?balW(wIn,pw).strips:Math.ceil(wIn/pwF);
+      var slen=vr>0?sL(stripHFt,vr):(isB?sL(stripHFt,0):stripHFt+0.5);
       for(var i=0;i<ns;i++)allStripLens.push(slen);
     });
     allStripLens.sort(function(a,b){return b-a;});
