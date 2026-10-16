@@ -79,7 +79,7 @@ optgroup{font-weight:600}
 
 var SK='wallpaper_pro_v1';
 var BASE_R=3.00,BASE_N=4.00,BASE_H=4.00,PRIMER=1.30;
-var INSTALL_MIN=925,POWDER_MIN=925,ACCENT_MIN=750,ACCENT_MIN_EACH=600;
+var INSTALL_MIN=925,POWDER_MIN=925,ACCENT_MIN=750,ACCENT_MIN_EACH=600,CEIL_MIN=1500;
 var SPACES=[
   {v:'accent_wall',l:'Accent wall',m:1.1},{v:'bath',l:'Bathroom',m:1.2},{v:'bedroom',l:'Bedroom',m:1.0},
   {v:'ceiling',l:'Ceiling',m:2.0},{v:'closet',l:'Closet',m:1.2},{v:'dining_room',l:'Dining room',m:1.0},
@@ -549,7 +549,7 @@ function calcC(room){
   var diff=room.difficulty||1;
   var lad=LADS.find(function(l){return l.v===room.ladder;})||LADS[0];
   var ceilSqft=room.ceiling.sections.reduce(function(s,sec){return s+(parseFloat(sec.length)||0)*(parseFloat(sec.width)||0);},0);
-  var ceilInstall=Math.max(INSTALL_MIN,Math.round(ceilSqft*base*2.0*ch*pi*mat*pat*diff*lad.m+ceilSqft*PRIMER));
+  var ceilInstall=Math.max(CEIL_MIN,Math.round(ceilSqft*base*2.0*ch*pi*mat*pat*diff*lad.m+ceilSqft*PRIMER));
   var rolls;
   if(strips>0&&lf>0){
     var avgStripLF=lf/strips;
@@ -615,7 +615,8 @@ function calcL(room){
   var awCount=(room.spaceType==='accent_wall')?Math.max(1,parseInt(room.accentWallCount)||1):1;
   var heUpcharge=room.material==='natural'?sqft*1.00:room.material==='highend'?sqft*1.50:0;
   var baseMin;
-  if(room.spaceType==='powder_bath'&&wd===0)baseMin=POWDER_MIN;
+  if(room.spaceType==='ceiling')baseMin=CEIL_MIN;
+  else if(room.spaceType==='powder_bath'&&wd===0)baseMin=POWDER_MIN;
   else if(room.spaceType==='accent_wall')baseMin=awCount===1?ACCENT_MIN:ACCENT_MIN_EACH*awCount;
   else baseMin=INSTALL_MIN;
   var wallMin=Math.round((baseMin+heUpcharge)*diff*bm*tm*(1-(wd||0))*(1-(cd||0)));
@@ -1673,7 +1674,12 @@ function bind(){
   document.querySelectorAll('.bapop').forEach(function(b){b.addEventListener('click',function(){var r=aRoom();if(!r)return;var paper=r.papers.find(function(p){return p.id===b.dataset.paperid;});if(paper){if(!paper.openings)paper.openings=[];paper.openings.push({id:uid(),type:'Door',width:'',above:'',below:''});save();render();}});});
   document.querySelectorAll('.bdpop').forEach(function(b){b.addEventListener('click',function(){var r=aRoom();if(!r)return;var paper=r.papers.find(function(p){return p.id===b.dataset.paperid;});if(paper){paper.openings.splice(parseInt(b.dataset.oidx),1);save();render();}});});
   document.querySelectorAll('.popsc').forEach(function(s){s.addEventListener('change',function(){var r=aRoom();if(!r)return;var paper=r.papers.find(function(p){return p.id===s.dataset.paperid;});if(paper&&paper.openings){paper.openings[parseInt(s.dataset.oidx)][s.dataset.key]=s.value;save();render();}});});
-  document.querySelectorAll('.popsb').forEach(function(i){i.addEventListener('blur',function(){var r=aRoom();if(!r)return;var paper=r.papers.find(function(p){return p.id===i.dataset.paperid;});if(paper&&paper.openings){paper.openings[parseInt(i.dataset.oidx)][i.dataset.key]=i.value;save();render();}});});
+  document.querySelectorAll('.popsb').forEach(function(i){
+    function savePop(){var r=aRoom();if(!r)return;var paper=r.papers.find(function(p){return p.id===i.dataset.paperid;});if(paper&&paper.openings){paper.openings[parseInt(i.dataset.oidx)][i.dataset.key]=i.value;save();render();}}
+    i.addEventListener('change',savePop);
+    i.addEventListener('blur',savePop);
+    i.addEventListener('keydown',function(e){if(e.key==='Enter')i.blur();});
+  });
   document.querySelectorAll('.prsc').forEach(function(s){s.addEventListener('change',function(){var r=aRoom();if(!r)return;var paper=r.papers.find(function(p){return p.id===s.dataset.paperid;});if(paper){paper[s.dataset.key]=s.value;save();render();}});});
   document.querySelectorAll('.prpt').forEach(function(s){s.addEventListener('change',function(){var r=aRoom();if(!r)return;var paper=r.papers.find(function(p){return p.id===s.dataset.paperid;});if(!paper)return;var pt=PT[parseInt(s.value)]||PT[0];paper.paperTypeIdx=s.value;paper.paperWidth=pt.width?String(pt.width):'';paper.rollFt=(pt.rollFt&&!pt.custom)?String(pt.rollFt):'';save();render();});});
   document.querySelectorAll('.prb').forEach(function(i){i.addEventListener('blur',function(){var r=aRoom();if(!r)return;var paper=r.papers.find(function(p){return p.id===i.dataset.paperid;});if(paper){paper[i.dataset.key]=i.value;save();render();}});});
