@@ -79,7 +79,7 @@ optgroup{font-weight:600}
 
 var SK='wallpaper_pro_v1';
 var BASE_R=3.00,BASE_N=4.00,BASE_H=4.00,PRIMER=1.30;
-var INSTALL_MIN=925,POWDER_MIN=925,ACCENT_MIN=750,ACCENT_MIN_EACH=600,CEIL_MIN=1500;
+var INSTALL_MIN=925,POWDER_MIN=925,ACCENT_MIN=750,ACCENT_MIN_EACH=600,CEIL_MIN=1500,CEIL_ADDON_MIN=500;
 var SPACES=[
   {v:'accent_wall',l:'Accent wall',m:1.1},{v:'bath',l:'Bathroom',m:1.2},{v:'bedroom',l:'Bedroom',m:1.0},
   {v:'ceiling',l:'Ceiling',m:2.0},{v:'closet',l:'Closet',m:1.2},{v:'dining_room',l:'Dining room',m:1.0},
@@ -399,22 +399,39 @@ function calcP(room){
   }
   var rolls;
   if(useS&&room.segments&&room.segments.length>1){
-    // Multiple segments with different heights — greedy pack by actual strip lengths
-    var allStripLens=[];
-    room.segments.forEach(function(seg){
-      var wIn=parseFloat(seg.width)||0,hFt=parseFloat(seg.height)||0;
-      var stripHFt=ph>0?ph/12:hFt;
-      if(!wIn||!hFt)return;
-      var ns=isB?balW(wIn,pw).strips:Math.ceil(wIn/pwF);
-      var slen=vr>0?sL(stripHFt,vr):(isB?sL(stripHFt,0):stripHFt+0.5);
-      for(var i=0;i<ns;i++)allStripLens.push(slen);
-    });
-    allStripLens.sort(function(a,b){return b-a;});
-    rolls=0;var rem=0;
-    allStripLens.forEach(function(len){
-      if(rem<len){rolls++;rem=rf;}
-      rem-=len;
-    });
+    if(isB){
+      // Panel balancing — pack each wall independently (dye lot consistency)
+      rolls=0;
+      room.segments.forEach(function(seg){
+        var wIn=parseFloat(seg.width)||0,hFt=parseFloat(seg.height)||0;
+        var stripHFt=hFt; // always use per-segment height for panel balancing
+        if(!wIn||!hFt)return;
+        var ns=balW(wIn,pw).strips;
+        var slen=sL(stripHFt,0);
+        var rem=0;
+        for(var i=0;i<ns;i++){
+          if(rem<slen){rolls++;rem=rf;}
+          rem-=slen;
+        }
+      });
+    } else {
+      // Multiple segments with different heights — greedy pack across all walls
+      var allStripLens=[];
+      room.segments.forEach(function(seg){
+        var wIn=parseFloat(seg.width)||0,hFt=parseFloat(seg.height)||0;
+        var stripHFt=ph>0?ph/12:hFt;
+        if(!wIn||!hFt)return;
+        var ns=Math.ceil(wIn/pwF);
+        var slen=vr>0?sL(stripHFt,vr):stripHFt+0.5;
+        for(var i=0;i<ns;i++)allStripLens.push(slen);
+      });
+      allStripLens.sort(function(a,b){return b-a;});
+      rolls=0;var rem=0;
+      allStripLens.forEach(function(len){
+        if(rem<len){rolls++;rem=rf;}
+        rem-=len;
+      });
+    }
   } else {
     var maxStripFt=0;
     if(ph>0){
@@ -549,7 +566,8 @@ function calcC(room){
   var diff=room.difficulty||1;
   var lad=LADS.find(function(l){return l.v===room.ladder;})||LADS[0];
   var ceilSqft=room.ceiling.sections.reduce(function(s,sec){return s+(parseFloat(sec.length)||0)*(parseFloat(sec.width)||0);},0);
-  var ceilInstall=Math.max(CEIL_MIN,Math.round(ceilSqft*base*2.0*ch*pi*mat*pat*diff*lad.m+ceilSqft*PRIMER));
+  var ceilMin=room.spaceType==='ceiling'?CEIL_MIN:CEIL_ADDON_MIN;
+  var ceilInstall=Math.max(ceilMin,Math.round(ceilSqft*base*2.0*ch*pi*mat*pat*diff*lad.m+ceilSqft*PRIMER));
   var rolls;
   if(strips>0&&lf>0){
     var avgStripLF=lf/strips;
@@ -1172,7 +1190,7 @@ function rRoom(room){
   h+='<div class="toggle-row" style="margin-bottom:0"><span class="toggle-label">Panel balancing (x1.175) <span style="font-weight:400;font-size:11px;color:#aaa">— centering patterns like grasscloth across a wall</span></span><label class="toggle"><input type="checkbox" class="rft" data-key="panelBalancing"'+(room.panelBalancing?' checked':'')+'><span class="slider-tog"></span></label></div>';
   h+='<div class="toggle-row" style="margin-bottom:0"><span class="toggle-label">Hand-trimmed (x1.15) <span style="font-weight:400;font-size:11px;color:#aaa">— paper that requires cutting the selvage edge before hanging</span></span><label class="toggle"><input type="checkbox" class="rft" data-key="handTrimmed"'+(room.handTrimmed?' checked':'')+'><span class="slider-tog"></span></label></div>';
   h+='</div>';
-  h+='<div class="section-head">Difficulty</div><div class="field-hint">Multiplies the base labor price. Use x1.1 for tricky layouts, x1.2 for complex patterns or tight spaces, x1.3 for very challenging installs.</div>';
+  h+='<div class="section-head">Difficulty <span style="font-weight:400;font-size:11px;color:#aaa;text-transform:none;letter-spacing:0">— x1.1 tricky layouts · x1.2 complex patterns or tight spaces · x1.3 very challenging</span></div>';
   h+='<div class="diff-btns">';
   DIFFS.forEach(function(d){h+='<button class="'+dClass(room,d)+'" data-diff="'+d+'">x'+d+'</button>';});
   h+='</div>';
@@ -1222,7 +1240,7 @@ function rRoom(room){
         h+='<hr class="divider">';
         h+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">';
         h+='<div class="section-head" style="margin:0">Openings</div><button id="bao">+ Add opening</button></div>';
-    h+='<div class="field-hint" style="margin-bottom:8px">Doors, windows, cabinets that affect strip count. Width in inches. \'Above\' and \'Below\' are the papered inches above/below the opening (not including the opening itself).</div>';
+    h+='<p style="font-size:11px;color:#aaa;margin-bottom:6px">Width in inches. Above/Below = papered inches above or below the frame.</p>';
         h+=rOps(room,pw);
       }
     }
@@ -1231,7 +1249,7 @@ function rRoom(room){
     h+='<hr class="divider">';
     h+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">';
     h+='<div class="section-head" style="margin:0">Openings</div><button id="bao">+ Add opening</button></div>';
-    h+='<div class="field-hint" style="margin-bottom:8px">Doors, windows, cabinets that affect strip count. Width in inches. \'Above\' and \'Below\' are the papered inches above/below the opening (not including the opening itself).</div>';
+    h+='<p style="font-size:11px;color:#aaa;margin-bottom:6px">Width in inches. Above/Below = papered inches above or below the frame.</p>';
     h+=rOps(room,pw);
   }
 
@@ -1567,9 +1585,9 @@ function rOps(room,pw){
 function rCeil(room){
   var ceil=room.ceiling;
   var h='<div style="margin-top:10px;padding:1rem;background:#f8f8f8;border-radius:8px;border:1px solid #e0e0e0">';
-  h+='<div class="grid2" style="margin-bottom:10px"><div class="field"><label>Paper direction</label><select id="bcd">';
-  h+='<option value="length"'+(ceil.direction==='length'?' selected':'')+'>Along the length</option>';
-  h+='<option value="width"'+(ceil.direction==='width'?' selected':'')+'>Along the width</option>';
+  h+='<div class="grid2" style="margin-bottom:4px"><div class="field"><label>Paper direction <span style="font-weight:400;font-size:11px;color:#aaa">— which way the strips run across the ceiling</span></label><select id="bcd">';
+  h+='<option value="length"'+(ceil.direction==='length'?' selected':'')+'>Strips run along the Length (most common)</option>';
+  h+='<option value="width"'+(ceil.direction==='width'?' selected':'')+'>Strips run along the Width</option>';
   h+='</select></div></div>';
   h+='<div class="section-head" style="margin-top:0">Ceiling sections</div>';
   ceil.sections.forEach(function(sec,idx){
