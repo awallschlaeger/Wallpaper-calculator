@@ -266,6 +266,49 @@ function balW(wIn,pw){
   return{strips:t,desc:t+' strips at ~'+e.toFixed(1)+'in each'};
 }
 
+// ---- Roll packing helpers (actual piece lengths, first-fit decreasing) ----
+function packRolls(pieces,rf){
+  var bins=[];
+  pieces.slice().sort(function(a,b){return b-a;}).forEach(function(len){
+    while(len>rf+1e-9){bins.push(0);len-=rf;} // longer than a roll: spliced, uses whole rolls
+    if(len<=1e-9)return;
+    for(var i=0;i<bins.length;i++){if(bins[i]>=len-1e-9){bins[i]-=len;return;}}
+    bins.push(rf-len);
+  });
+  return bins.length;
+}
+function wallPieces(wFt,stripHFt,openings,pw,vr){
+  var pwF=pw/12,full=Math.ceil(wFt/pwF),parts=[];
+  (openings||[]).forEach(function(op){
+    var ow=parseFloat(op.width)||0,ab=parseFloat(op.above)||0,be=parseFloat(op.below)||0;
+    var sf=Math.floor((ow-2-pw)/pw);
+    if(sf<1)return;
+    full-=sf;
+    for(var i=0;i<sf;i++){if(ab>0)parts.push(sL(ab/12,vr));if(be>0)parts.push(sL(be/12,vr));}
+  });
+  full=Math.max(0,full);
+  var L=sL(stripHFt,vr),pieces=[];
+  for(var j=0;j<full;j++)pieces.push(L);
+  return pieces.concat(parts);
+}
+function vaultSegPieces(seg,pwF,vr){
+  var wFt=parseFloat(seg.width)||0,wIn=wFt*12;
+  var hH=parseFloat(seg.vaultHeightHigh)||0,hL=parseFloat(seg.vaultHeightLow)||0,hP=parseFloat(seg.vaultHeightPeak)||0;
+  var vt=seg.vaultType||'pitch',peakPosIn;
+  if(vt==='pitch'){hP=hH;peakPosIn=0;}
+  else if(vt==='symmetric'){peakPosIn=wIn/2;if(!hL)hL=hH;}
+  else{peakPosIn=parseFloat(seg.vaultPeakPos)||wIn/2;}
+  var n=Math.ceil(wFt/pwF),out=[];
+  for(var si=0;si<n;si++){
+    var cx=(si+0.5)*(wIn/n),ht;
+    if(cx<=peakPosIn){ht=peakPosIn>0?hH+(hP-hH)*(cx/peakPosIn):hH;}
+    else{ht=hP+(hL-hP)*((cx-peakPosIn)/(wIn-peakPosIn));}
+    ht=ht/12;
+    out.push(vr>0?sL(ht,vr):ht+0.5);
+  }
+  return out;
+}
+
 function calcPForPaper(room, paper){
   if(room.vaulted&&parseFloat(room.vaultWidth)>0&&parseFloat(room.vaultHeightPeak)>0){
     return calcPVaulted(room, paper);
@@ -397,56 +440,37 @@ function calcP(room){
     if(rW>rO)hdN='Half drop buffer ('+vr+'in repeat) would need '+rW+' rolls. Keeping at '+rO+'.';
     else lf=bLF;
   }
-  var rolls;
-  if(useS&&room.segments&&room.segments.length>1){
-    if(isB){
-      // Panel balancing — pack each wall independently (dye lot consistency)
-      rolls=0;
-      room.segments.forEach(function(seg){
-        var wIn=parseFloat(seg.width)||0,hFt=parseFloat(seg.height)||0;
-        var stripHFt=hFt; // always use per-segment height for panel balancing
-        if(!wIn||!hFt)return;
-        var ns=balW(wIn,pw).strips;
-        var slen=sL(stripHFt,0);
-        var rem=0;
-        for(var i=0;i<ns;i++){
-          if(rem<slen){rolls++;rem=rf;}
-          rem-=slen;
-        }
-      });
-    } else {
-      // Multiple segments with different heights — greedy pack across all walls
-      var allStripLens=[];
-      room.segments.forEach(function(seg){
-        var wIn=parseFloat(seg.width)||0,hFt=parseFloat(seg.height)||0;
-        var stripHFt=ph>0?ph/12:hFt;
-        if(!wIn||!hFt)return;
-        var ns=Math.ceil(wIn/pwF);
-        var slen=vr>0?sL(stripHFt,vr):stripHFt+0.5;
-        for(var i=0;i<ns;i++)allStripLens.push(slen);
-      });
-      allStripLens.sort(function(a,b){return b-a;});
-      rolls=0;var rem=0;
-      allStripLens.forEach(function(len){
-        if(rem<len){rolls++;rem=rf;}
-        rem-=len;
-      });
-    }
+  var rolls=0,pieces=[];
+  if(isB&&room.segments&&room.segments.length>0){
+    // Panel balancing — pack each wall independently (dye lot consistency)
+    room.segments.forEach(function(seg){
+      var wIn=parseFloat(seg.width)||0,hFt=parseFloat(seg.height)||0;
+      if(!wIn||!hFt)return;
+      var ns=balW(wIn,pw).strips;
+      var slen=sL(hFt,0); // per-segment height, not room-level papered height
+      var rem=0;
+      for(var i=0;i<ns;i++){
+        if(rem<slen){rolls++;rem=rf;}
+        rem-=slen;
+      }
+    });
+  } else if(useS){
+    // Wall-by-wall: list the real pieces from every wall (openings included) and pack them
+    room.segments.forEach(function(seg){
+      var wFt=parseFloat(seg.width)||0,hFt=parseFloat(seg.height)||0;
+      if(!wFt)return;
+      if(seg.vaulted&&(parseFloat(seg.vaultHeightHigh)||0)>0){
+        pieces=pieces.concat(vaultSegPieces(seg,pwF,vr));
+        return;
+      }
+      if(!hFt)return;
+      var stripHFt=ph>0?ph/12:hFt;
+      pieces=pieces.concat(wallPieces(wFt,stripHFt,seg.openings,pw,vr));
+    });
   } else {
-    var maxStripFt=0;
-    if(ph>0){
-      maxStripFt=ph/12;
-    } else {
-      (useS?room.segments:[room.segments[0]||{}]).forEach(function(seg){
-        var h=parseFloat(seg.height)||0;if(h>maxStripFt)maxStripFt=h;
-      });
-    }
-    var longestStrip=vr>0?sL(maxStripFt,vr):maxStripFt+0.5;
-    // If openings have reduced LF, use average actual strip length for packing
-    var avgStripFt=strips>0?lf/strips:longestStrip;
-    var effectiveStrip=avgStripFt<longestStrip?avgStripFt:longestStrip;
-    var stripsPerRoll=effectiveStrip>0?Math.floor(rf/effectiveStrip):1;
-    rolls=stripsPerRoll>0?Math.ceil(strips/stripsPerRoll):Math.ceil(lf/rf);
+    var seg1=room.segments[0]||{};
+    var w1=parseFloat(seg1.width)||0,h1=parseFloat(seg1.height)||0;
+    pieces=wallPieces(w1,ph>0?ph/12:h1,room.openings,pw,vr);
   }
   // Add extra strips for window return wraps
   var allOpsWrap=[];
@@ -467,7 +491,9 @@ function calcP(room){
     var wrapSides=(op.wrapLeft?1:0)+(op.wrapRight?1:0)+(op.wrapReturns?2:0);
     lf+=wrapSides*wrapLen;
     strips+=wrapSides;
+    for(var wi=0;wi<wrapSides;wi++)pieces.push(wrapLen);
   });
+  if(!(isB&&room.segments&&room.segments.length>0))rolls=packRolls(pieces,rf);
   return{totalStrips:strips,totalLF:lf,rolls:rolls,rf:rf,halfDropNote:hdN};
 }
 
